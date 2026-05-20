@@ -8,6 +8,7 @@
 experiment.S
 *.bin
 *.sym
+*.cart
 *.000
 *.bak
 *.bck
@@ -28,3 +29,4 @@ sym-lib-table
 *.lck
 ibom.html
 build/
+minidragon.egg-info/

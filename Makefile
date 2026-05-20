@@ -4,6 +4,7 @@ all: helloworld.bin fixedpoint.bin bootrom.bin
 RUNTIME += lib/runtime/init.S
 RUNTIME += lib/runtime/start.S
 RUNTIME += lib/runtime/const.S
+RUNTIME += lib/runtime/cart.S
 RUNTIME += lib/runtime/data.S
 RUNTIME += lib/runtime/heap.S
 RUNTIME += lib/hardware/hwregs.S
@@ -31,6 +32,9 @@ STDLIB += lib/conversion/hex.S
 # Bootrom sources.
 BOOTROM_SRCS += lib/hardware/serial.S
 BOOTROM_SRCS += lib/hardware/serial.py
+BOOTROM_SRCS += lib/hardware/cartridge.S
+BOOTROM_SRCS += lib/hardware/cartridge.py
+BOOTROM_SRCS += lib/conversion/fixed.py
 BOOTROM_SRCS += bootrom/main.py
 
 # Hello world sources.
@@ -45,6 +49,7 @@ FIXEDPOINT_SRCS += lib/conversion/fixed.py
 FIXEDPOINT_SRCS += bootrom/fixedtest.py
 
 # Magic rule maker for above sources to map to various files.
+BOOTROM_JUMPTABLE += bootrom/jumptable.S
 BOOTROM_INITS := $(patsubst %.py, build/%.init.S, $(filter %.py, ${BOOTROM_SRCS}))
 BOOTROM_DATAS := $(patsubst %.py, build/%.data.S, $(filter %.py, ${BOOTROM_SRCS}))
 BOOTROM_CODES := $(patsubst %.py, build/%.code.S, $(filter %.py, ${BOOTROM_SRCS}))
@@ -63,17 +68,19 @@ FIXEDPOINT_CODES += $(filter %.S, ${FIXEDPOINT_SRCS})
 # Rule to convert any python file to its output init/data/code sections.
 build/%.init.S build/%.data.S build/%.code.S: %.py
 	@mkdir -p $(dir $@)
-	python3 compiler.py --lib lib/ --optimize -o build/$*.code.S -d build/$*.data.S -i build/$*.init.S $^
+	./compiler --lib lib/ --optimize -o build/$*.code.S -d build/$*.data.S -i build/$*.init.S $^
 
-build/bootrom_listing.S: $(STDLIB) $(RUNTIME) $(BOOTROM_INITS) $(BOOTROM_DATAS) $(BOOTROM_CODES)
+build/bootrom_listing.S: $(STDLIB) $(RUNTIME) $(BOOTROM_JUMPTABLE) $(BOOTROM_INITS) $(BOOTROM_DATAS) $(BOOTROM_CODES)
 	@mkdir -p $(dir $@)
 	cat lib/runtime/init.S > $@
+	cat $(BOOTROM_JUMPTABLE) >> $@
 	cat $(BOOTROM_INITS) >> $@
 	cat lib/runtime/start.S >> $@
 	cat $(STDLIB) >> $@
 	cat $(BOOTROM_CODES) >> $@
 	cat lib/runtime/const.S >> $@
 	cat lib/hardware/hwregs.S >> $@
+	cat lib/runtime/cart.S >> $@
 	cat lib/runtime/data.S >> $@
 	cat $(BOOTROM_DATAS) >> $@
 	cat lib/runtime/heap.S >> $@
@@ -87,6 +94,7 @@ build/helloworld_listing.S: $(STDLIB) $(RUNTIME) $(HELLOWORLD_INITS) $(HELLOWORL
 	cat $(HELLOWORLD_CODES) >> $@
 	cat lib/runtime/const.S >> $@
 	cat lib/hardware/hwregs.S >> $@
+	cat lib/runtime/cart.S >> $@
 	cat lib/runtime/data.S >> $@
 	cat $(HELLOWORLD_DATAS) >> $@
 	cat lib/runtime/heap.S >> $@
@@ -100,19 +108,25 @@ build/fixedpoint_listing.S: $(STDLIB) $(RUNTIME) $(FIXEDPOINT_INITS) $(FIXEDPOIN
 	cat $(FIXEDPOINT_CODES) >> $@
 	cat lib/runtime/const.S >> $@
 	cat lib/hardware/hwregs.S >> $@
+	cat lib/runtime/cart.S >> $@
 	cat lib/runtime/data.S >> $@
 	cat $(FIXEDPOINT_DATAS) >> $@
 	cat lib/runtime/heap.S >> $@
 
 # Rule to convert any prefixed listing file to its associated bin/sym files.
 %.bin %.sym: build/%_listing.S
-	python3 assembler.py \
+	./assembler \
 		--origin 0x0000 \
 		--size 0x7800 \
 		--destination $@ \
 		--generate-symbols \
 		--symbol-file $(@:bin=sym) \
 		$^
+
+.PHONY: jumptable
+jumptable: bootrom.bin
+	cat bootrom.sym | grep "jumptable_" | grep -v "jumptable_end" | sed 's/jumptable_//' > cartridge/lib/bootrom.sym
+	cp bootrom.bin cartridge/lib/bootrom.bin
 
 .PHONY: clean
 clean:

@@ -96,6 +96,33 @@ def serial_reverse() -> void:
     serial_send("\033[7m")
 
 
+def serial_move(row: uint8, col: uint8) -> void:
+    """
+    Moves the cursor to the specified row and column. This is one-indexed, so 1, 1 would be the upper left
+    of the terminal. Remember that a VT-100 has 24 rows and 80 columns.
+    """
+
+    # Cap off our row and column, using unsigned integer wraparound to our advantage. Avoid a costly
+    # comparison operation for numbers we know are safe.
+    row -= 1
+    col -= 1
+    if (row & 0xF0) and row > 23:
+        row = 23
+    if (row & 0xC0) and col > 79:
+        col = 79
+
+    # Send the escape sequence to move our cursor.
+    serial_send("\033[")
+    serial_send(_serial_lut(row))
+    serial_send_byte(ord(";"))
+    serial_send(_serial_lut(col))
+    serial_send_byte(ord("H"))
+
+
+def _serial_lut(val: uint8) -> extern[const[str]]: ...
+    # Look up the string conversion for a particular val given we precalculated these for speed.
+
+
 def serial_send(data: const[str]) -> void:
     """
     Given a string, write that data to the serial port. Note that you are
@@ -103,8 +130,8 @@ def serial_send(data: const[str]) -> void:
     print().
     """
 
-    offset: uint8 = 0
-    while True:
+    byte: char
+    for byte in data:
         # Flow control must be handled here, so we don't overwhelm the serial terminal.
         if R6551AP_status_reg & R6551AP_RDRF:
             recvd: const[uint8] = R6551AP_buffer_reg
@@ -135,15 +162,10 @@ def serial_send(data: const[str]) -> void:
                     if (R6551AP_buffer_reg & 0b11011111) - ord('A') < 26:
                         break
 
-        byte: char = data[offset]
-        if not byte:
-            return
-
         serial_send_byte(ord(byte))
-        offset += 1
 
 
-def serial_recv(echo_input: bool = True, mask_input: bool = False, allow_empty: bool = True) -> str:
+def serial_recv(max_length: uint8 = 127, echo_input: bool = True, mask_input: bool = False, allow_empty: bool = True) -> str:
     """
     Receive a string that is terminated with a newline character. That means
     the remote side hit enter. The newline character itself will not be appended
@@ -205,24 +227,26 @@ def serial_recv(echo_input: bool = True, mask_input: bool = False, allow_empty: 
                 accum = accum[:length]
 
                 # Erase last letter.
-                serial_send_byte(ord("\x08"))
-                serial_send_byte(ord(" "))
-                serial_send_byte(ord("\x08"))
+                if echo_input:
+                    serial_send_byte(ord("\x08"))
+                    serial_send_byte(ord(" "))
+                    serial_send_byte(ord("\x08"))
 
             continue
 
-        # Echo it back to the serial terminal.
-        if echo_input:
-            serial_send_byte(ord('*') if mask_input else ord(recvd))
+        if length != max_length:
+            # Echo it back to the serial terminal.
+            if echo_input:
+                serial_send_byte(ord('*') if mask_input else ord(recvd))
 
-        # Add it to our accumulator.
-        accum += recvd
-        length += 1
+            # Add it to our accumulator.
+            accum += recvd
+            length += 1
 
     return accum
 
 
-def serial_input(prompt: const[str], echo_input: bool = True, mask_input: bool = False, allow_empty: bool = True) -> str:
+def serial_input(prompt: const[str], max_length: uint8 = 127, echo_input: bool = True, mask_input: bool = False, allow_empty: bool = True) -> str:
     """
     Given a prompt string, send that prompt over serial, then read input until
     the enter key is pressed, echoing the received characters back to the
@@ -230,7 +254,7 @@ def serial_input(prompt: const[str], echo_input: bool = True, mask_input: bool =
     """
     serial_send(prompt)
 
-    retval: const[str] = serial_recv(echo_input, mask_input, allow_empty)
+    retval: const[str] = serial_recv(max_length, echo_input, mask_input, allow_empty)
     serial_send_byte(ord("\n"))
 
     return retval
