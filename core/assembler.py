@@ -1,4 +1,5 @@
 #! /usr/bin/python3
+import re
 from colorama import Fore, Style
 
 from ast import literal_eval
@@ -353,6 +354,81 @@ def assemble(
     mnemonics: List[str],
     existing_labels: Optional[Dict[str, int]] = None,
 ) -> List[Tuple[int, int]]:
+    # Macro and Constant pre-processing
+    user_macros: Dict[str, List[str]] = {}
+    user_constants: Dict[str, str] = {}
+    remaining_mnemonics = []
+    idx = 0
+    while idx < len(mnemonics):
+        m = mnemonics[idx]
+        if m.upper().startswith(".MACRO "):
+            macro_name = m[7:].strip().upper()
+            macro_body = []
+            idx += 1
+            while idx < len(mnemonics) and mnemonics[idx].upper() != ".ENDM":
+                macro_body.append(mnemonics[idx])
+                idx += 1
+            user_macros[macro_name] = macro_body
+        elif m.upper().startswith(".SET "):
+            content = m[5:].strip()
+            if "," in content:
+                name, val = content.split(",", 1)
+                user_constants[name.strip()] = val.strip()
+        else:
+            remaining_mnemonics.append(m)
+        idx += 1
+
+    # Resolve constants
+    if user_constants:
+        for _ in range(10):  # Max recursion depth for constants
+            changed = False
+            for name, val in user_constants.items():
+                new_val = re.sub(
+                    r"\b[A-Za-z0-9_]+\b",
+                    lambda m: user_constants.get(m.group(0), m.group(0)),
+                    val,
+                )
+                if new_val != val:
+                    user_constants[name] = new_val
+                    changed = True
+            if not changed:
+                break
+
+    def expand_macros(
+        lines: List[str],
+        definitions: Dict[str, List[str]],
+        constants: Dict[str, str],
+        depth: int = 0,
+    ) -> List[str]:
+        if depth > 100:
+            raise InvalidInstructionException("Max macro nesting depth exceeded")
+        result = []
+        for line in lines:
+            # Expand constants in the line, but only in the parameters
+            if constants:
+                if " " in line:
+                    mnemonic_part, params = line.split(" ", 1)
+                    params = re.sub(
+                        r"\b[A-Za-z0-9_]+\b",
+                        lambda m: constants.get(m.group(0), m.group(0)),
+                        params,
+                    )
+                    line = mnemonic_part + " " + params
+
+            parts = line.split(" ", 1)
+            mnemonic = parts[0].upper()
+            if mnemonic in definitions:
+                result.extend(
+                    expand_macros(
+                        definitions[mnemonic], definitions, constants, depth + 1
+                    )
+                )
+            else:
+                result.append(line)
+        return result
+
+    mnemonics = expand_macros(remaining_mnemonics, user_macros, user_constants)
+
     org = 0
     labels: Dict[str, int] = (
         existing_labels if existing_labels is not None else {}
