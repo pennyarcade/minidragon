@@ -35,21 +35,21 @@ BOOTROM_SRCS += lib/hardware/serial.py
 BOOTROM_SRCS += lib/hardware/cartridge.S
 BOOTROM_SRCS += lib/hardware/cartridge.py
 BOOTROM_SRCS += lib/conversion/fixed.py
-BOOTROM_SRCS += bootrom/main.py
+BOOTROM_SRCS += rom/bootrom/main.py
 
 # Hello world sources.
 HELLOWORLD_SRCS += lib/hardware/serial.S
 HELLOWORLD_SRCS += lib/hardware/serial.py
-HELLOWORLD_SRCS += bootrom/helloworld.py
+HELLOWORLD_SRCS += rom/bootrom/helloworld.py
 
 # Fixed point test sources.
 FIXEDPOINT_SRCS += lib/hardware/serial.S
 FIXEDPOINT_SRCS += lib/hardware/serial.py
 FIXEDPOINT_SRCS += lib/conversion/fixed.py
-FIXEDPOINT_SRCS += bootrom/fixedtest.py
+FIXEDPOINT_SRCS += rom/bootrom/fixedtest.py
 
 # Magic rule maker for above sources to map to various files.
-BOOTROM_JUMPTABLE += bootrom/jumptable.S
+BOOTROM_JUMPTABLE += rom/bootrom/jumptable.S
 BOOTROM_INITS := $(patsubst %.py, build/%.init.S, $(filter %.py, ${BOOTROM_SRCS}))
 BOOTROM_DATAS := $(patsubst %.py, build/%.data.S, $(filter %.py, ${BOOTROM_SRCS}))
 BOOTROM_CODES := $(patsubst %.py, build/%.code.S, $(filter %.py, ${BOOTROM_SRCS}))
