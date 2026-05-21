@@ -134,6 +134,7 @@ class R6551AP(Peripheral):
     def __del__(self) -> None:
         if self.__old and self.__stdin:
             termios.tcsetattr(self.__stdin.fileno(), termios.TCSADRAIN, self.__old)
+            os.set_blocking(0, True)
 
     def _baud(self) -> Optional[int]:
         if self.sbr == 1:
@@ -634,30 +635,34 @@ def main(boot_rom: str, cartridge: Optional[str], serial_port: Optional[str], ve
     # Now, instantiate the CPU core and run until a halt instruction is encountered.
     cpu = CPUCore(memory, ram_filter)
     after = time.time()
-    while True:
-        if cpu.mnemonic == "HALT":
-            break
+    try:
+        while True:
+            if cpu.mnemonic == "HALT":
+                print("\nCPU halted.", file=sys.stderr)
+                break
 
-        # Get the timing from the last instruction so we can be accurate about speed.
-        cycles = cpu.cycles
-        before = after
+            # Get the timing from the last instruction so we can be accurate about speed.
+            cycles = cpu.cycles
+            before = after
 
-        cpu.tick()
-        ram_filter.tick(cpu.cycles, cpu.ticks)
+            cpu.tick()
+            ram_filter.tick(cpu.cycles, cpu.ticks)
 
-        # The real CPU runs at ~18.0KHz, simulate that here.
-        cycles = cpu.cycles - cycles
-        expected = float(cycles) * ticktime
-        after = time.time()
-        catchup = expected - (after - before)
+            # The real CPU runs at ~18.0KHz, simulate that here.
+            cycles = cpu.cycles - cycles
+            expected = float(cycles) * ticktime
+            after = time.time()
+            catchup = expected - (after - before)
 
-        if catchup > 0.0:
-            waittime = after + catchup
-            while (actual := time.time()) < waittime:
-                pass
+            if catchup > 0.0:
+                waittime = after + catchup
+                while (actual := time.time()) < waittime:
+                    pass
 
-            # Compensate for overrun by rewinding time.
-            after = waittime - (actual - waittime)
+                # Compensate for overrun by rewinding time.
+                after = waittime - (actual - waittime)
+    except KeyboardInterrupt:
+        print("\nExecution interrupted by user.", file=sys.stderr)
 
     return 0
 
