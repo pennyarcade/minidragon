@@ -1,4 +1,5 @@
 #! /usr/bin/python3
+import re
 from colorama import Fore, Style
 
 from ast import literal_eval
