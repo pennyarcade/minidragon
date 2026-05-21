@@ -544,7 +544,7 @@ class CPUCore:
         address = address & 0xFFFF
         if self.memory_filter:
             read_data = self.memory_filter.read(address)
-            if read_data:
+            if read_data is not None:
                 return read_data & 0xFF
         return self.ram[address]
 
@@ -642,8 +642,8 @@ class CPUCore:
     @property
     def mnemonic(self) -> str:
         ip = self.data if self.last_instruction.ip_input else self.ip
-        # Don't filter reads/writes here since this is only for debugging and not part of any full system emulation.
-        return disassemble(self.ram[ip])
+        # Not filtering reads/writes here does not work because it breaks detection of the HALT instruction to stop emulation
+        return disassemble(self.__read_memory(ip))
 
     def dump(self, highlight_changes: bool = False) -> None:
         # Print the contents of RAM
