@@ -4,15 +4,15 @@ import textwrap
 import unittest
 from typing import Any, Dict, Optional
 
-from .util import (
+from minidragon.util import (
     signextend,
     hexstr,
     binstr,
     bintoint,
     sanitize,
 )
-from .core import _splitparams
-from .compiler import (
+from minidragon.core import _splitparams
+from minidragon.compiler import (
     Compiler,
     CompilerError,
     CompilerSettings,
